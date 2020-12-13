@@ -171,6 +171,8 @@ io.on("connection", (socket: SocketIO.Socket) => {
   let roomID = "";
   let person = createPerson(userID);
 
+  console.log("Connected:", roomID);
+
   socket.on("room", (roomID_: string) => {
     log(userID, "joined room", roomID_);
 
