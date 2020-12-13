@@ -1,0 +1,9 @@
+{
+	"compilerOptions": {
+		"module": "CommonJS",
+		"outDir": "dist/",
+	},
+	"include": ["src/"],
+	"files": ["src/index.d.ts"],
+	"exclude": ["node_modules/"]
+}
