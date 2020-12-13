@@ -189,7 +189,7 @@ io.on("connection", (socket: SocketIO.Socket) => {
       // Send the clients room information every two ticks
       room.onTick((room) => {
         // Don't overload the clients
-        if (room.serverTime % 8 === 0) {
+        if (room.serverTime % 2 === 0) {
           // Send the person info about the other people in the room
           for (let [userId, user] of Array.from(
             rooms.get(roomId).people.entries()
