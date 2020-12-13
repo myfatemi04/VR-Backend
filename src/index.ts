@@ -5,6 +5,7 @@ import * as express from "express";
 import { GRAVITY } from "./gravity";
 import Room from "./room";
 import { v4 as uuidv4 } from "uuid";
+import * as twilio from "twilio";
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -161,31 +162,48 @@ function log(...s: any[]) {
   console.log(new Date().toISOString(), ...s);
 }
 
-io.on("connection", (socket: SocketIO.Socket) => {
-  let userId = uuidv4();
-  let roomId = "";
-  let person = createPerson(userId);
+const AccessToken = twilio.jwt.AccessToken;
+const VideoGrant = AccessToken.VideoGrant;
+const { TWILIO_ACCOUNT_SID, TWILIO_API_SID, TWILIO_API_SECRET } = process.env;
 
-  socket.on("room", (roomId_: string) => {
-    log(userId, "joined room", roomId_);
-    socket.emit("userId", userId);
+io.on("connection", (socket: SocketIO.Socket) => {
+  let userID = uuidv4();
+  let roomID = "";
+  let person = createPerson(userID);
+
+  socket.on("room", (roomID_: string) => {
+    log(userID, "joined room", roomID_);
+
+    if (TWILIO_ACCOUNT_SID && TWILIO_API_SID && TWILIO_API_SECRET) {
+      // create a VideoGrant so they can join the room with Twilio
+      const accessToken = new AccessToken(
+        TWILIO_ACCOUNT_SID,
+        TWILIO_API_SID,
+        TWILIO_API_SECRET,
+        { identity: userID }
+      );
+      accessToken.addGrant(new VideoGrant({ room: roomID_ }));
+      socket.emit("joined-room", { userID, accessToken: accessToken.toJwt() });
+    } else {
+      console.error("WARNING: No Twilio credentials found!");
+    }
 
     // Leave the old room, if they were in one
-    if (roomId) {
-      removeFromRoom(roomId, userId);
-      socket.broadcast.emit("disconnected", userId);
-      socket.leave(roomId);
+    if (roomID) {
+      removeFromRoom(roomID, userID);
+      socket.broadcast.emit("disconnected", userID);
+      socket.leave(roomID);
     }
 
     // Set the roomId
-    roomId = roomId_;
+    roomID = roomID_;
 
     // Join the new room
-    socket.join(roomId);
-    socket.broadcast.emit("connected", userId);
+    socket.join(roomID);
+    socket.broadcast.emit("connected", userID);
 
     // If the room doesn't exist yet, create it
-    if (!rooms.has(roomId)) {
+    if (!rooms.has(roomID)) {
       let room = new Room(DEFAULT_GRAVITY);
 
       // Send the clients room information every two ticks
@@ -194,9 +212,9 @@ io.on("connection", (socket: SocketIO.Socket) => {
         if (room.serverTime % 2 === 0) {
           // Send the person info about the other people in the room
           for (let [userId, user] of Array.from(
-            rooms.get(roomId).people.entries()
+            rooms.get(roomID).people.entries()
           )) {
-            io.in(roomId).emit("person-update", userId, user);
+            io.in(roomID).emit("person-update", userId, user);
           }
         }
       });
@@ -204,17 +222,17 @@ io.on("connection", (socket: SocketIO.Socket) => {
       room.start();
 
       // Add the room
-      rooms.set(roomId, room);
+      rooms.set(roomID, room);
     }
 
-    addToRoom(roomId, userId, person);
+    addToRoom(roomID, userID, person);
   });
 
   // Client disconnected
   socket.on("disconnect", () => {
-    socket.broadcast.emit("disconnected", userId);
-    removeFromRoom(roomId, userId);
-    log(userId, "disconnected");
+    socket.broadcast.emit("disconnected", userID);
+    removeFromRoom(roomID, userID);
+    log(userID, "disconnected");
     socket.disconnect(true);
   });
 
@@ -225,7 +243,7 @@ io.on("connection", (socket: SocketIO.Socket) => {
   // Process a "jump" event
   // The default speed at which you jump is 2 m/s.
   socket.on("jump", (speed: number = 2) => {
-    log(userId, "jumped");
+    log(userID, "jumped");
 
     person.velocity.y = speed;
   });
@@ -276,20 +294,20 @@ io.on("connection", (socket: SocketIO.Socket) => {
 
   socket.on("set-yaw", (yaw: number) => {
     person.yaw = yaw;
-    socket.broadcast.emit("person-yaw", userId, yaw);
+    socket.broadcast.emit("person-yaw", userID, yaw);
   });
 
   socket.on("set-pitch", (pitch: number) => {
     person.pitch = pitch;
-    socket.broadcast.emit("person-pitch", userId, pitch);
+    socket.broadcast.emit("person-pitch", userID, pitch);
   });
 
   socket.on("username", (username: string) => {
-    if (roomId) {
-      rooms[roomId].people.get(userId).username = username;
+    if (roomID) {
+      rooms[roomID].people.get(userID).username = username;
     }
 
-    socket.broadcast.emit("username", userId, username);
+    socket.broadcast.emit("username", userID, username);
   });
 });
 

@@ -14,6 +14,9 @@ var express = require("express");
 var gravity_1 = require("./gravity");
 var room_1 = require("./room");
 var uuid_1 = require("uuid");
+var twilio = require("twilio");
+var dotenv = require("dotenv");
+dotenv.config();
 // 'VRChats' namespace is declared in 'index.d.ts'
 // The main map with all the rooms
 var rooms = new Map();
@@ -151,49 +154,60 @@ function log() {
     }
     console.log.apply(console, __spreadArrays([new Date().toISOString()], s));
 }
+var AccessToken = twilio.jwt.AccessToken;
+var VideoGrant = AccessToken.VideoGrant;
+var _a = process.env, TWILIO_ACCOUNT_SID = _a.TWILIO_ACCOUNT_SID, TWILIO_API_SID = _a.TWILIO_API_SID, TWILIO_API_SECRET = _a.TWILIO_API_SECRET;
 io.on("connection", function (socket) {
-    var userId = uuid_1.v4();
-    var roomId = "";
-    var person = createPerson(userId);
-    socket.on("room", function (roomId_) {
-        log(userId, "joined room", roomId_);
-        socket.emit("userId", userId);
+    var userID = uuid_1.v4();
+    var roomID = "";
+    var person = createPerson(userID);
+    socket.on("room", function (roomID_) {
+        log(userID, "joined room", roomID_);
+        if (TWILIO_ACCOUNT_SID && TWILIO_API_SID && TWILIO_API_SECRET) {
+            // create a VideoGrant so they can join the room with Twilio
+            var accessToken = new AccessToken(TWILIO_ACCOUNT_SID, TWILIO_API_SID, TWILIO_API_SECRET, { identity: userID });
+            accessToken.addGrant(new VideoGrant({ room: roomID_ }));
+            socket.emit("joined-room", { userID: userID, accessToken: accessToken.toJwt() });
+        }
+        else {
+            console.error("WARNING: No Twilio credentials found!");
+        }
         // Leave the old room, if they were in one
-        if (roomId) {
-            removeFromRoom(roomId, userId);
-            socket.broadcast.emit("disconnected", userId);
-            socket.leave(roomId);
+        if (roomID) {
+            removeFromRoom(roomID, userID);
+            socket.broadcast.emit("disconnected", userID);
+            socket.leave(roomID);
         }
         // Set the roomId
-        roomId = roomId_;
+        roomID = roomID_;
         // Join the new room
-        socket.join(roomId);
-        socket.broadcast.emit("connected", userId);
+        socket.join(roomID);
+        socket.broadcast.emit("connected", userID);
         // If the room doesn't exist yet, create it
-        if (!rooms.has(roomId)) {
+        if (!rooms.has(roomID)) {
             var room = new room_1["default"](DEFAULT_GRAVITY);
             // Send the clients room information every two ticks
             room.onTick(function (room) {
                 // Don't overload the clients
-                if (room.serverTime % 8 === 0) {
+                if (room.serverTime % 2 === 0) {
                     // Send the person info about the other people in the room
-                    for (var _i = 0, _a = Array.from(rooms.get(roomId).people.entries()); _i < _a.length; _i++) {
-                        var _b = _a[_i], userId_1 = _b[0], user = _b[1];
-                        io["in"](roomId).emit("person-update", userId_1, user);
+                    for (var _i = 0, _a = Array.from(rooms.get(roomID).people.entries()); _i < _a.length; _i++) {
+                        var _b = _a[_i], userId = _b[0], user = _b[1];
+                        io["in"](roomID).emit("person-update", userId, user);
                     }
                 }
             });
             room.start();
             // Add the room
-            rooms.set(roomId, room);
+            rooms.set(roomID, room);
         }
-        addToRoom(roomId, userId, person);
+        addToRoom(roomID, userID, person);
     });
     // Client disconnected
     socket.on("disconnect", function () {
-        socket.broadcast.emit("disconnected", userId);
-        removeFromRoom(roomId, userId);
-        log(userId, "disconnected");
+        socket.broadcast.emit("disconnected", userID);
+        removeFromRoom(roomID, userID);
+        log(userID, "disconnected");
         socket.disconnect(true);
     });
     socket.on("set-flying", function (flying) {
@@ -203,7 +217,7 @@ io.on("connection", function (socket) {
     // The default speed at which you jump is 2 m/s.
     socket.on("jump", function (speed) {
         if (speed === void 0) { speed = 2; }
-        log(userId, "jumped");
+        log(userID, "jumped");
         person.velocity.y = speed;
     });
     // Process a request to fly up or down
@@ -246,17 +260,17 @@ io.on("connection", function (socket) {
     });
     socket.on("set-yaw", function (yaw) {
         person.yaw = yaw;
-        socket.broadcast.emit("person-yaw", userId, yaw);
+        socket.broadcast.emit("person-yaw", userID, yaw);
     });
     socket.on("set-pitch", function (pitch) {
         person.pitch = pitch;
-        socket.broadcast.emit("person-pitch", userId, pitch);
+        socket.broadcast.emit("person-pitch", userID, pitch);
     });
     socket.on("username", function (username) {
-        if (roomId) {
-            rooms[roomId].people.get(userId).username = username;
+        if (roomID) {
+            rooms[roomID].people.get(userID).username = username;
         }
-        socket.broadcast.emit("username", userId, username);
+        socket.broadcast.emit("username", userID, username);
     });
 });
 // Load from process.env in case we're on Heroku
