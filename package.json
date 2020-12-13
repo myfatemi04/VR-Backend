@@ -18,10 +18,12 @@
   },
   "homepage": "https://github.com/myfatemi04/vr-chats#readme",
   "dependencies": {
+    "@types/dotenv": "^8.2.0",
     "@types/express": "^4.17.9",
     "@types/socket.io": "^2.1.12",
     "@types/uuid": "^8.3.0",
     "cors": "^2.8.5",
+    "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "oimo": "^1.0.9",
     "socket.io": "^3.0.4",

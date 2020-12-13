@@ -5,6 +5,8 @@ import * as express from "express";
 import { GRAVITY } from "./gravity";
 import Room from "./room";
 import { v4 as uuidv4 } from "uuid";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 // 'VRChats' namespace is declared in 'index.d.ts'
 
